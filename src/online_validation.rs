@@ -34,12 +34,16 @@ async fn fetch_phone_types(
         if start_index >= csv_rows.len() {
             break;
         }
-        let elapsed = loop_start.elapsed();
-        sleep(Duration::from_millis(
-            (1000 - elapsed.as_millis()).try_into().unwrap_or(0),
-        ));
+        wait_one_second(loop_start);
     }
     Ok(results)
+}
+
+fn wait_one_second(start: Instant) {
+    let elapsed = start.elapsed();
+    sleep(Duration::from_millis(
+        (1000 - elapsed.as_millis()).try_into().unwrap_or(0),
+    ));
 }
 
 async fn get_ten_phone_types(
