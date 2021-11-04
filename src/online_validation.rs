@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use urlencoding::encode;
 
 pub async fn run_online(csv_rows: Vec<CsvRow>, output_path: String) -> Result<(), Box<dyn Error>> {
-    let api_key = env::var("PHONE_VALIDATOR_API_KEY").unwrap();
+    let api_key = env::var("PHONE_VALIDATOR_API_KEY").expect("Missing PHONE_VALIDATOR_API_KEY in env.");
     let results = fetch_phone_types(&csv_rows, api_key).await?;
     write_output_file(output_path, results);
     Ok(())
