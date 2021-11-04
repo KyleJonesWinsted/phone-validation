@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CsvRow {
     pub internal_id: String,
-    pub phone: Option<String>,
+    pub phone: String,
     pub phone_type: Option<String>,
 }
 

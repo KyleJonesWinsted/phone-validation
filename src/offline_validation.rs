@@ -22,12 +22,9 @@ fn get_invalid_contacts(csv_rows: Vec<CsvRow>) -> Vec<CsvRow> {
         .collect()
 }
 
-fn is_valid_number(phone: &Option<String>) -> bool {
-    if let Some(phone) = phone {
-        match phonenumber::parse(Some(Id::US), phone) {
-            Ok(number) => return number.is_valid(),
-            Err(_) => return false,
-        }
+fn is_valid_number(phone: &String) -> bool {
+    match phonenumber::parse(Some(Id::US), phone) {
+        Ok(number) => return number.is_valid(),
+        Err(_) => return false,
     }
-    true
 }
