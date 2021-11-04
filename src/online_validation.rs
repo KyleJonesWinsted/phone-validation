@@ -52,7 +52,7 @@ async fn get_ten_phone_types(
     csv_rows: &Vec<CsvRow>,
     api_key: &String,
 ) -> Result<(), Box<dyn Error>> {
-    let end_index = cmp::min(start_index + 10, csv_rows.len() - 1);
+    let end_index = cmp::min(start_index + 10, csv_rows.len());
     let mut requests = Vec::new();
     for index in start_index..end_index {
         let row = csv_rows.get(index).unwrap();
