@@ -1,19 +1,22 @@
-use std::{env::args, time::Instant};
+#![warn(clippy::all, clippy::pedantic)]
+
 use csv::{Reader, Writer};
 use phonenumber::country::Id;
 use serde::{Deserialize, Serialize};
+use std::{env::args, time::Instant};
 
 fn main() {
     let start = Instant::now();
     let input_path = args().nth(1).expect("Missing CSV file path");
     let output_path = args().nth(2).expect("Missing output path");
     let rdr = Reader::from_path(input_path).expect("Did not find file. Try absolute path");
-    let invalid_contacts = get_invalid_contacts(rdr);
-    write_output_file(output_path, invalid_contacts);
+    let csv_rows: Vec<CsvRow> = get_csv_rows(rdr);
+    let invalid_rows = get_invalid_contacts(csv_rows);
+    write_output_file(output_path, invalid_rows);
     println!("Done! That took {:?}", start.elapsed());
 }
 
-fn write_output_file(path: String, contacts: Vec<Contact>) {
+fn write_output_file(path: String, contacts: Vec<CsvRow>) {
     let mut wtr = Writer::from_path(path).expect("Unable to create file with given path");
     for contact in contacts {
         wtr.serialize(contact).expect("Unable to serialize contact");
@@ -21,21 +24,23 @@ fn write_output_file(path: String, contacts: Vec<Contact>) {
     wtr.flush().expect("Unable to flush writer");
 }
 
-fn get_invalid_contacts(mut rdr: Reader<std::fs::File>) -> Vec<Contact> {
+fn get_csv_rows(mut rdr: Reader<std::fs::File>) -> Vec<CsvRow> {
     rdr.deserialize()
-        .filter_map(|result| {
-            let contact: Contact = result.expect("Unable to parse contact");
-            if is_valid_contact(&contact) {
+        .map(|r| r.expect("Unable to read csv row"))
+        .collect()
+}
+
+fn get_invalid_contacts(csv_rows: Vec<CsvRow>) -> Vec<CsvRow> {
+    csv_rows
+        .into_iter()
+        .filter_map(|contact| {
+            if is_valid_number(&contact.phone) {
                 None
             } else {
                 Some(contact)
             }
         })
         .collect()
-}
-
-fn is_valid_contact(contact: &Contact) -> bool {
-    return is_valid_number(&contact.main_phone) && is_valid_number(&contact.office_phone);
 }
 
 fn is_valid_number(phone: &Option<String>) -> bool {
@@ -49,9 +54,7 @@ fn is_valid_number(phone: &Option<String>) -> bool {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct Contact {
-    entity_id: String,
+struct CsvRow {
     internal_id: String,
-    main_phone: Option<String>,
-    office_phone: Option<String>,
+    phone: Option<String>,
 }
