@@ -25,29 +25,39 @@ async fn fetch_phone_types(
 ) -> Result<Vec<CsvRow>, Box<dyn Error>> {
     let mut start_index = 0;
     let mut results = Vec::with_capacity(csv_rows.len());
-    let start = Instant::now();
+    let function_start = Instant::now();
     loop {
-        print_progress(start_index, &results, start);
-        let start_time = Instant::now();
-        let end_index = cmp::min(start_index + 10, csv_rows.len() - 1);
-        let mut requests = Vec::new();
-        for index in start_index..end_index {
-            let row = csv_rows.get(index).unwrap();
-            requests.push(tokio::spawn(send_request(row.clone(), api_key.clone())));
-        }
-        for request in requests {
-            results.push(request.await??);
-        }
+        print_progress(start_index, &results, function_start);
+        let loop_start = Instant::now();
+        get_ten_phone_types(&mut results, start_index, csv_rows, &api_key).await?;
         start_index += 10;
         if start_index >= csv_rows.len() {
             break;
         }
-        let elapsed = start_time.elapsed();
+        let elapsed = loop_start.elapsed();
         sleep(Duration::from_millis(
             (1000 - elapsed.as_millis()).try_into().unwrap_or(0),
         ));
     }
     Ok(results)
+}
+
+async fn get_ten_phone_types(
+    results: &mut Vec<CsvRow>,
+    start_index: usize,
+    csv_rows: &Vec<CsvRow>,
+    api_key: &String,
+) -> Result<(), Box<dyn Error>> {
+    let end_index = cmp::min(start_index + 10, csv_rows.len() - 1);
+    let mut requests = Vec::new();
+    for index in start_index..end_index {
+        let row = csv_rows.get(index).unwrap();
+        requests.push(tokio::spawn(send_request(row.clone(), api_key.clone())));
+    }
+    for request in requests {
+        results.push(request.await??);
+    }
+    Ok(())
 }
 
 async fn send_request(mut csv_row: CsvRow, api_key: String) -> Result<CsvRow, reqwest::Error> {
