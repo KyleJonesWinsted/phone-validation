@@ -7,36 +7,34 @@ use std::{
 };
 
 use phone_validation::{write_output_file, CsvRow};
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use urlencoding::encode;
 
 pub async fn run_online(csv_rows: Vec<CsvRow>, output_path: String) -> Result<(), Box<dyn Error>> {
     let api_key =
         env::var("PHONE_VALIDATOR_API_KEY").expect("Missing PHONE_VALIDATOR_API_KEY in env.");
-    let results = fetch_phone_types(&csv_rows, api_key).await?;
+    let results = fetch_phone_types(&csv_rows, api_key).await;
     write_output_file(output_path, results);
     Ok(())
 }
 
 // Only 10 requests per second allowed
-async fn fetch_phone_types(
-    csv_rows: &Vec<CsvRow>,
-    api_key: String,
-) -> Result<Vec<CsvRow>, Box<dyn Error>> {
+async fn fetch_phone_types(csv_rows: &Vec<CsvRow>, api_key: String) -> Vec<CsvRow> {
     let mut start_index = 0;
     let mut results = Vec::with_capacity(csv_rows.len());
     let function_start = Instant::now();
-    loop {
+    while start_index < csv_rows.len() {
         print_progress(start_index, &results, function_start);
         let loop_start = Instant::now();
-        get_ten_phone_types(&mut results, start_index, csv_rows, &api_key).await?;
-        start_index += 10;
-        if start_index >= csv_rows.len() {
-            break;
+        if let Err(e) = get_ten_phone_types(&mut results, start_index, csv_rows, &api_key).await {
+            println!("An Error Occured: {:?}", e);
+            return results;
         }
+        start_index += 10;
         wait_one_second(loop_start);
     }
-    Ok(results)
+    results
 }
 
 fn wait_one_second(start: Instant) {
@@ -70,9 +68,16 @@ async fn send_request(mut csv_row: CsvRow, api_key: String) -> Result<CsvRow, re
         api_key,
         encode(&csv_row.phone.split('x').nth(0).unwrap_or_default())
     );
-    let data = reqwest::get(url).await?.text().await?;
+    let response = reqwest::get(url).await?;
+    if response.status() != StatusCode::OK {
+        print!("{}\n", response.status());
+    }
+    let data = response.text().await?;
     let result: ResponseData =
         serde_json::from_str(&data).expect(&format!("Unable to parse data {}", data));
+    if result.status_code != Some(String::from("200")) {
+        print!("{:?} {:?}\n", result.status_code, result.status_message);
+    }
     csv_row.phone_type = result.phone_basic.unwrap_or_default().line_type;
     Ok(csv_row)
 }

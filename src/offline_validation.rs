@@ -12,7 +12,7 @@ fn get_invalid_contacts(csv_rows: Vec<CsvRow>) -> Vec<CsvRow> {
     csv_rows
         .into_iter()
         .filter_map(|mut contact| {
-            if is_valid_number(&mut contact.phone) {
+            if contact.phone.is_empty() || is_valid_number(&mut contact.phone) {
                 None
             } else {
                 contact.phone_type = Some("Invalid".to_string());

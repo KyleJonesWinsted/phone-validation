@@ -43,8 +43,9 @@ impl Parameters {
 }
 
 pub fn get_csv_rows(mut rdr: Reader<std::fs::File>) -> Vec<CsvRow> {
-    rdr.deserialize()
+    rdr.deserialize::<CsvRow>()
         .map(|r| r.expect("Unable to read csv row"))
+        .filter(|r| !r.phone.is_empty())
         .collect()
 }
 
