@@ -1,4 +1,4 @@
-use std::env::args;
+use std::{env::args};
 
 use csv::{Reader, Writer};
 use serde::{Deserialize, Serialize};
@@ -49,9 +49,9 @@ pub fn get_csv_rows(mut rdr: Reader<std::fs::File>) -> Vec<CsvRow> {
         .collect()
 }
 
-pub fn write_output_file(path: String, contacts: Vec<CsvRow>) {
+pub fn write_output_file(path: String, contacts: &Vec<CsvRow>) {
     let mut wtr = Writer::from_path(path).expect("Unable to create file with given path");
-    for contact in contacts {
+    for contact in contacts.iter() {
         wtr.serialize(contact).expect("Unable to serialize contact");
     }
     wtr.flush().expect("Unable to flush writer");

@@ -5,7 +5,7 @@ use crate::CsvRow;
 
 pub fn run_offline(csv_rows: Vec<CsvRow>, output_path: String) {
     let invalid_rows = get_invalid_contacts(csv_rows);
-    write_output_file(output_path, invalid_rows);
+    write_output_file(output_path, &invalid_rows);
 }
 
 fn get_invalid_contacts(csv_rows: Vec<CsvRow>) -> Vec<CsvRow> {

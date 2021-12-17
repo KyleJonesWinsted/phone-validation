@@ -2,8 +2,9 @@ use std::{
     cmp, env,
     error::Error,
     io::{stdout, Write},
+    sync::{Arc, Mutex},
     thread::sleep,
-    time::{Duration, Instant},
+    time::{Duration, Instant}, process::exit,
 };
 
 use phone_validation::{write_output_file, CsvRow};
@@ -14,27 +15,38 @@ use urlencoding::encode;
 pub async fn run_online(csv_rows: Vec<CsvRow>, output_path: String) -> Result<(), Box<dyn Error>> {
     let api_key =
         env::var("PHONE_VALIDATOR_API_KEY").expect("Missing PHONE_VALIDATOR_API_KEY in env.");
-    let results = fetch_phone_types(&csv_rows, api_key).await;
-    write_output_file(output_path, results);
+    let results = Arc::new(Mutex::new(Vec::with_capacity(csv_rows.len())));
+    let output = Arc::clone(&results);
+    let handler_output_path = output_path.clone();
+    println!("Started");
+    ctrlc::set_handler(move || {
+        write_output_file(
+            handler_output_path.clone(),
+            &output.lock().expect("Unable to pass to ctrl c handler"),
+        );
+        exit(0);
+    })
+    .expect("Error setting handler");
+    fetch_phone_types(&csv_rows, api_key, Arc::clone(&results)).await;
+    write_output_file(output_path, &results.lock().expect("Failed passing to write output"));
     Ok(())
 }
 
 // Only 10 requests per second allowed
-async fn fetch_phone_types(csv_rows: &Vec<CsvRow>, api_key: String) -> Vec<CsvRow> {
+async fn fetch_phone_types(csv_rows: &Vec<CsvRow>, api_key: String, mutex: Arc<Mutex<Vec<CsvRow>>>) {
     let mut start_index = 0;
-    let mut results = Vec::with_capacity(csv_rows.len());
     let function_start = Instant::now();
     while start_index < csv_rows.len() {
+        let mut results = mutex.lock().expect("Unable to acquire lock");
         print_progress(start_index, &results, function_start);
         let loop_start = Instant::now();
         if let Err(e) = get_ten_phone_types(&mut results, start_index, csv_rows, &api_key).await {
             println!("An Error Occured: {:?}", e);
-            return results;
+            return;
         }
         start_index += 10;
         wait_one_second(loop_start);
     }
-    results
 }
 
 fn wait_one_second(start: Instant) {
