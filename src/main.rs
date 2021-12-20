@@ -19,7 +19,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let rdr = Reader::from_path(input_path).expect("Did not find file. Try absolute path");
     let csv_rows: Vec<CsvRow> = get_csv_rows(rdr);
     match mode {
-        Mode::Offline => run_offline(csv_rows, output_path),
+        Mode::Offline => run_offline(csv_rows, &output_path),
         Mode::Online => run_online(csv_rows, output_path).await?,
     };
     println!("Done! That took {:?}", start.elapsed());

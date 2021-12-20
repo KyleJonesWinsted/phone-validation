@@ -2,42 +2,46 @@ use std::{
     cmp, env,
     error::Error,
     io::{stdout, Write},
-    sync::{Arc, Mutex},
+    process::exit,
+    sync::Arc,
     thread::sleep,
-    time::{Duration, Instant}, process::exit,
+    time::{Duration, Instant},
 };
+
+use async_mutex::Mutex;
 
 use phone_validation::{write_output_file, CsvRow};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
+use tokio::runtime::Handle;
 use urlencoding::encode;
 
 pub async fn run_online(csv_rows: Vec<CsvRow>, output_path: String) -> Result<(), Box<dyn Error>> {
     let api_key =
         env::var("PHONE_VALIDATOR_API_KEY").expect("Missing PHONE_VALIDATOR_API_KEY in env.");
     let results = Arc::new(Mutex::new(Vec::with_capacity(csv_rows.len())));
-    let output = Arc::clone(&results);
-    let handler_output_path = output_path.clone();
-    println!("Started");
-    ctrlc::set_handler(move || {
-        write_output_file(
-            handler_output_path.clone(),
-            &output.lock().expect("Unable to pass to ctrl c handler"),
-        );
-        exit(0);
-    })
-    .expect("Error setting handler");
+    set_quit_handler(Arc::clone(&results), output_path.clone());
     fetch_phone_types(&csv_rows, api_key, Arc::clone(&results)).await;
-    write_output_file(output_path, &results.lock().expect("Failed passing to write output"));
+    write_output_file(&output_path, &results.lock().await);
     Ok(())
 }
 
+fn set_quit_handler(output: Arc<Mutex<Vec<CsvRow>>>, output_path: String) {
+    ctrlc::set_handler(move || {
+        let rt = Handle::current();
+        let contacts = rt.block_on(async { output.lock().await });
+        write_output_file(&output_path, &contacts);
+        exit(0);
+    })
+    .expect("Error setting handler");
+}
+
 // Only 10 requests per second allowed
-async fn fetch_phone_types(csv_rows: &Vec<CsvRow>, api_key: String, mutex: Arc<Mutex<Vec<CsvRow>>>) {
+async fn fetch_phone_types(csv_rows: &[CsvRow], api_key: String, mutex: Arc<Mutex<Vec<CsvRow>>>) {
     let mut start_index = 0;
     let function_start = Instant::now();
     while start_index < csv_rows.len() {
-        let mut results = mutex.lock().expect("Unable to acquire lock");
+        let mut results = mutex.lock().await;
         print_progress(start_index, &results, function_start);
         let loop_start = Instant::now();
         if let Err(e) = get_ten_phone_types(&mut results, start_index, csv_rows, &api_key).await {
@@ -59,14 +63,17 @@ fn wait_one_second(start: Instant) {
 async fn get_ten_phone_types(
     results: &mut Vec<CsvRow>,
     start_index: usize,
-    csv_rows: &Vec<CsvRow>,
-    api_key: &String,
+    csv_rows: &[CsvRow],
+    api_key: &str,
 ) -> Result<(), Box<dyn Error>> {
     let end_index = cmp::min(start_index + 10, csv_rows.len());
     let mut requests = Vec::new();
     for index in start_index..end_index {
         let row = csv_rows.get(index).unwrap();
-        requests.push(tokio::spawn(send_request(row.clone(), api_key.clone())));
+        requests.push(tokio::spawn(send_request(
+            row.clone(),
+            String::from(api_key),
+        )));
     }
     for request in requests {
         results.push(request.await??);
@@ -78,17 +85,17 @@ async fn send_request(mut csv_row: CsvRow, api_key: String) -> Result<CsvRow, re
     let url = format!(
         "https://www.phonevalidator.com/api/v2/phonesearch?apikey={}&phone={}&type=basic",
         api_key,
-        encode(&csv_row.phone.split('x').nth(0).unwrap_or_default())
+        encode(csv_row.phone.split('x').next().unwrap_or_default())
     );
     let response = reqwest::get(url).await?;
     if response.status() != StatusCode::OK {
-        print!("{}\n", response.status());
+        println!("{}", response.status());
     }
     let data = response.text().await?;
     let result: ResponseData =
-        serde_json::from_str(&data).expect(&format!("Unable to parse data {}", data));
+        serde_json::from_str(&data).unwrap_or_else(|_| panic!("Unable to parse data {}", data));
     if result.status_code != Some(String::from("200")) {
-        print!("{:?} {:?}\n", result.status_code, result.status_message);
+        println!("{:?} {:?}", result.status_code, result.status_message);
     }
     csv_row.phone_type = result.phone_basic.unwrap_or_default().line_type;
     Ok(csv_row)
@@ -147,13 +154,13 @@ struct ResponsePhoneBasic {
 impl Default for ResponsePhoneBasic {
     fn default() -> Self {
         Self {
-            phone_number: Default::default(),
-            report_date: Default::default(),
-            line_type: Default::default(),
-            phone_company: Default::default(),
-            phone_location: Default::default(),
-            error_code: Default::default(),
-            error_description: Default::default(),
+            phone_number: std::option::Option::default(),
+            report_date: std::option::Option::default(),
+            line_type: std::option::Option::default(),
+            phone_company: std::option::Option::default(),
+            phone_location: std::option::Option::default(),
+            error_code: std::option::Option::default(),
+            error_description: std::option::Option::default(),
         }
     }
 }
